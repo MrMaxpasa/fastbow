@@ -154,26 +154,32 @@ export default function RankEmblem({ rankId, color, size = 64 }: Props) {
 
     8: (
       <Svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
-        <Polygon
-          points={`${cx},${s*0.04} ${s*0.92},${s*0.27} ${s*0.92},${s*0.73} ${cx},${s*0.96} ${s*0.08},${s*0.73} ${s*0.08},${s*0.27}`}
-          fill="none"
+        {/* Corona */}
+        <Path
+          d={`M ${s*0.18} ${s*0.32} L ${s*0.18} ${s*0.18} L ${s*0.35} ${s*0.26} L ${s*0.5} ${s*0.12} L ${s*0.65} ${s*0.26} L ${s*0.82} ${s*0.18} L ${s*0.82} ${s*0.32} Z`}
+          fill={color}
+          opacity={0.9}
+        />
+        {/* Diana */}
+        <Circle cx={cx} cy={cy + s*0.08} r={s*0.35} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />
+        <Circle cx={cx} cy={cy + s*0.08} r={s*0.22} fill="none" stroke={color} strokeWidth={2} opacity={0.75} />
+        <Circle cx={cx} cy={cy + s*0.08} r={s*0.10} fill="none" stroke={color} strokeWidth={2.5} opacity={0.9} />
+        <Circle cx={cx} cy={cy + s*0.08} r={s*0.04} fill={color} />
+        {/* Palo de la flecha — extremo izquierdo en el centro exacto de la diana */}
+        <Line
+          x1={cx + s*0.42}
+          y1={cy + s*0.08}
+          x2={cx}
+          y2={cy + s*0.08}
           stroke={color}
           strokeWidth={2.5}
-        />
-        <Path
-          d={`M ${s*0.28} ${s*0.28} Q ${s*0.14} ${s*0.5} ${s*0.28} ${s*0.72}`}
-          fill="none"
-          stroke={color}
-          strokeWidth={3}
           strokeLinecap="round"
         />
-        <Line x1={s*0.28} y1={s*0.28} x2={s*0.5} y2={s*0.5} stroke={color} strokeWidth={1.5} opacity={0.7} />
-        <Line x1={s*0.28} y1={s*0.72} x2={s*0.5} y2={s*0.5} stroke={color} strokeWidth={1.5} opacity={0.7} />
-        <Line x1={s*0.5} y1={s*0.5} x2={s*0.82} y2={s*0.5} stroke={color} strokeWidth={2} strokeLinecap="round" />
-        <Polygon points={`${s*0.86},${s*0.5} ${s*0.76},${s*0.44} ${s*0.76},${s*0.56}`} fill={color} />
-        <Circle cx={s*0.3} cy={s*0.18} r={s*0.04} fill={color} />
-        <Circle cx={s*0.5} cy={s*0.18} r={s*0.04} fill={color} />
-        <Circle cx={s*0.7} cy={s*0.18} r={s*0.04} fill={color} />
+        {/* Plumas en el extremo derecho */}
+        <Line x1={cx + s*0.42} y1={cy + s*0.08} x2={cx + s*0.52} y2={cy} stroke={color} strokeWidth={2} strokeLinecap="round" />
+        <Line x1={cx + s*0.42} y1={cy + s*0.08} x2={cx + s*0.52} y2={cy + s*0.16} stroke={color} strokeWidth={2} strokeLinecap="round" />
+        <Line x1={cx + s*0.35} y1={cy + s*0.08} x2={cx + s*0.44} y2={cy + s*0.01} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+        <Line x1={cx + s*0.35} y1={cy + s*0.08} x2={cx + s*0.44} y2={cy + s*0.15} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
       </Svg>
     ),
   };
