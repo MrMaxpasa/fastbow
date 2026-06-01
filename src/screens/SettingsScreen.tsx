@@ -295,7 +295,8 @@ export default function SettingsScreen(_: Props) {
       <Text style={[st.sectionTitle, { marginTop: 32 }]}>Acerca de</Text>
       <View style={st.aboutCard}>
         <Text style={st.about}>
-          ArcheryScore v1.0{'\n'}
+          FastBow v1.0{'\n'}
+          Desarrollada por Max Padulo Santamaria.{'\n'}
           Detección de flechas con visión por computador.{'\n'}
           Funciona completamente sin internet.
         </Text>

@@ -1,8 +1,8 @@
 import { ExpoConfig } from 'expo/config';
 
 const config: ExpoConfig = {
-  name: 'ArcheryScore',
-  slug: 'archery-score-app',
+  name: 'FastBow',
+  slug: 'fastbow-app',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/icon.png',

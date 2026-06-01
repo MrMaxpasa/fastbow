@@ -1,4 +1,4 @@
-# 🏹 ArcheryScore
+# 🏹 FastBow
 
 App Android para registrar puntuaciones de tiro con arco fotografiando la diana.
 
