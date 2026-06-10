@@ -1,84 +1,299 @@
 // src/utils/targetDetection.ts
 //
-// FASE 1 — Detección geométrica con OpenCV.js / heurísticas de color
-// FASE 2 — Reemplazar analyzeTarget() con un modelo TensorFlow Lite entrenado
+// INTEGRACIÓN MODELO TFLITE — YOLOv11 Nano
+// Para activar detección real: cambiar IS_MOCK = false
+// y copiar el archivo fastbow_model.tflite en assets/models/
 //
-// La función analyzeTarget() es el único punto de entrada que necesitas cambiar
-// para mejorar la precisión. El resto de la app no cambia.
+// Clases del modelo:
+//   0 = flecha
+//   1 = anillo negro exterior
+//   2 = anillo azul
+//   3 = anillo rojo
+//   4 = anillo amarillo
+//   5 = bullseye
 
-import type { ArrowDetection, ArrowScore } from '../types';
+import type { ArrowScore } from '../types';
+
+const IS_MOCK = true; // cambiar a false cuando el modelo esté listo
+
+// ─── Tipos internos ───────────────────────────────────────────────
+
+interface BoundingBox {
+  xCenter: number;
+  yCenter: number;
+  width: number;
+  height: number;
+  confidence: number;
+  classId: number;
+}
+
+interface DianaGeometry {
+  centerX: number;
+  centerY: number;
+  rings: {
+    classId: number;
+    radius: number;
+  }[];
+  totalRadius: number;
+}
+
+export interface ArrowDetection {
+  score: ArrowScore;
+  x: number;
+  y: number;
+  confidence: number;
+}
+
+export interface TendencyResult {
+  horizontal: 'izquierda' | 'centro' | 'derecha';
+  vertical: 'arriba' | 'centro' | 'abajo';
+  offsetX: number; // -1 a 1, negativo = izquierda, positivo = derecha
+  offsetY: number; // -1 a 1, negativo = arriba, positivo = abajo
+  description: string;
+}
 
 export interface DetectionResult {
   arrows: ArrowDetection[];
+  tendency: TendencyResult | null;
   dianaCenter: { x: number; y: number };
   dianaRadius: number;
   success: boolean;
   errorMessage?: string;
 }
 
-// Convierte coordenadas de imagen (px) a puntuación WA estándar
-// Los anillos están a: 10%(X/10), 20%(9), 30%(8), 40%(7), 50%(6),
-//                       60%(5), 70%(4), 80%(3), 90%(2), 100%(1)
+// ─── Geometría WA — proporciones fijas de diana World Archery ─────
+// Los 10 anillos están espaciados uniformemente
+// Radio de cada anillo como % del radio total:
+const WA_RING_RATIOS: Record<number, { min: number; max: number; scores: ArrowScore[] }> = {
+  5: { min: 0,    max: 0.10, scores: ['X', '10'] }, // bullseye
+  4: { min: 0.10, max: 0.20, scores: ['9'] },        // amarillo interior
+  3: { min: 0.20, max: 0.40, scores: ['8', '7'] },   // rojo
+  2: { min: 0.40, max: 0.60, scores: ['6', '5'] },   // azul
+  1: { min: 0.60, max: 0.80, scores: ['4', '3'] },   // negro
+  0: { min: 0.80, max: 1.00, scores: ['2', '1'] },   // blanco exterior
+};
+
+// ─── Calcula puntuación desde distancia al centro ─────────────────
 function distanceToScore(
-  distance: number,
-  dianaRadius: number
+  arrowX: number,
+  arrowY: number,
+  diana: DianaGeometry
 ): ArrowScore {
-  const ratio = distance / dianaRadius;
-  if (ratio <= 0.05) return 'X';
-  if (ratio <= 0.15) return '10';
-  if (ratio <= 0.25) return '9';
-  if (ratio <= 0.35) return '8';
-  if (ratio <= 0.45) return '7';
-  if (ratio <= 0.55) return '6';
-  if (ratio <= 0.65) return '5';
-  if (ratio <= 0.75) return '4';
-  if (ratio <= 0.85) return '3';
-  if (ratio <= 0.92) return '2';
-  if (ratio <= 1.0) return '1';
+  const dx = arrowX - diana.centerX;
+  const dy = arrowY - diana.centerY;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const ratio = distance / diana.totalRadius;
+
+  if (ratio > 1.0) return 'M';
+
+  // Buscar en qué anillo cae según proporciones WA
+  for (const [classIdStr, ring] of Object.entries(WA_RING_RATIOS)) {
+    if (ratio >= ring.min && ratio < ring.max) {
+      // Para bullseye distinguir X de 10 por distancia al centro exacto
+      if (parseInt(classIdStr) === 5) {
+        return ratio < 0.05 ? 'X' : '10';
+      }
+      // Para anillos con dos puntuaciones, la interior vale más
+      if (ring.scores.length === 2) {
+        const mid = ring.min + (ring.max - ring.min) / 2;
+        return ratio < mid ? ring.scores[0] : ring.scores[1];
+      }
+      return ring.scores[0];
+    }
+  }
+
   return 'M';
 }
 
-// ─────────────────────────────────────────────────────────────────
-// PUNTO DE INTEGRACIÓN CV
-// ─────────────────────────────────────────────────────────────────
-// Recibe la URI de la imagen (local) y devuelve las flechas detectadas.
-// Actualmente usa una simulación. En FASE 2, aquí iría:
-//   1. Cargar imagen con expo-image-manipulator (escalar a 640x640)
-//   2. Correr modelo TFLite de detección de keypoints
-//   3. Mapear keypoints a scores con distanceToScore()
-//
-export async function analyzeTarget(imageUri: string): Promise<DetectionResult> {
-  // Simula una pequeña latencia de procesamiento
-  await new Promise((resolve) => setTimeout(resolve, 800));
+// ─── Extrae geometría de la diana desde las detecciones ──────────
+function extractDianaGeometry(boxes: BoundingBox[]): DianaGeometry | null {
+  // Buscar bullseye (clase 5) para obtener el centro
+  const bullseye = boxes
+    .filter(b => b.classId === 5 && b.confidence > 0.5)
+    .sort((a, b) => b.confidence - a.confidence)[0];
 
-  // ── TODO FASE 2: reemplazar este bloque con inferencia real ──
-  const isMock = true;
-  if (isMock) {
-    return generateMockDetection();
-  }
-  // ─────────────────────────────────────────────────────────────
+  // Si no hay bullseye intentar con anillo interior más pequeño disponible
+  const centerSource = bullseye ?? boxes
+    .filter(b => b.classId >= 3 && b.confidence > 0.4)
+    .sort((a, b) => a.width - b.width)[0];
 
-  return { arrows: [], dianaCenter: { x: 0.5, y: 0.5 }, dianaRadius: 0.4, success: false };
+  if (!centerSource) return null;
+
+  const centerX = centerSource.xCenter;
+  const centerY = centerSource.yCenter;
+
+  // Buscar anillo exterior (clase 1) para el radio total
+  const outerRing = boxes
+    .filter(b => b.classId === 1 && b.confidence > 0.4)
+    .sort((a, b) => b.width - a.width)[0];
+
+  // Si no hay anillo exterior, estimar desde el bullseye
+  // El bullseye es ~10% del radio total en diana WA
+  const totalRadius = outerRing
+    ? Math.max(outerRing.width, outerRing.height) / 2
+    : (Math.max(centerSource.width, centerSource.height) / 2) / 0.10;
+
+  const rings = boxes
+    .filter(b => b.classId >= 1 && b.classId <= 5)
+    .map(b => ({
+      classId: b.classId,
+      radius: Math.max(b.width, b.height) / 2,
+    }));
+
+  return { centerX, centerY, rings, totalRadius };
 }
 
-// Genera una detección simulada realista para desarrollo
+// ─── Calcula tendencia de disparo ────────────────────────────────
+function calculateTendency(
+  arrows: ArrowDetection[],
+  diana: DianaGeometry
+): TendencyResult | null {
+  const validArrows = arrows.filter(a => a.score !== 'M');
+  if (validArrows.length < 2) return null;
+
+  // Media de posiciones relativas al centro de la diana
+  const avgOffsetX = validArrows.reduce((sum, a) => sum + (a.x - diana.centerX), 0) / validArrows.length;
+  const avgOffsetY = validArrows.reduce((sum, a) => sum + (a.y - diana.centerY), 0) / validArrows.length;
+
+  // Normalizar por radio total
+  const normX = avgOffsetX / diana.totalRadius;
+  const normY = avgOffsetY / diana.totalRadius;
+
+  const THRESHOLD = 0.15;
+
+  const horizontal: TendencyResult['horizontal'] =
+    normX < -THRESHOLD ? 'izquierda' :
+    normX > THRESHOLD ? 'derecha' : 'centro';
+
+  const vertical: TendencyResult['vertical'] =
+    normY < -THRESHOLD ? 'arriba' :
+    normY > THRESHOLD ? 'abajo' : 'centro';
+
+  let description = '';
+  if (horizontal === 'centro' && vertical === 'centro') {
+    description = 'Agrupación centrada. Muy buena consistencia.';
+  } else {
+    const parts = [];
+    if (vertical !== 'centro') parts.push(vertical);
+    if (horizontal !== 'centro') parts.push(horizontal);
+    description = `Tendencia hacia ${parts.join('-')}. Ajusta tu apuntería.`;
+  }
+
+  return { horizontal, vertical, offsetX: normX, offsetY: normY, description };
+}
+
+// ─── PUNTO DE INTEGRACIÓN TFLITE ─────────────────────────────────
+// Cuando IS_MOCK = false, esta función carga el modelo real
+// El modelo debe estar en: assets/models/fastbow_model.tflite
+async function runModelInference(imageUri: string): Promise<BoundingBox[]> {
+  // TODO FASE REAL:
+  // 1. import * as tf from '@tensorflow/tfjs';
+  // 2. import '@tensorflow/tfjs-react-native';
+  // 3. const modelJson = require('../../assets/models/fastbow_model.tflite');
+  // 4. const model = await tf.loadGraphModel(tf.io.fromMemory(modelJson));
+  // 5. Preprocesar imagen con expo-image-manipulator a 640x640
+  // 6. Convertir a tensor float32 normalizado 0-1
+  // 7. const predictions = await model.executeAsync(tensor);
+  // 8. Parsear output YOLO [batch, 8400, 6] a BoundingBox[]
+  // 9. Aplicar NMS (Non-Maximum Suppression) para eliminar duplicados
+  throw new Error('Modelo TFLite no integrado todavía');
+}
+
+// ─── Función principal de análisis ───────────────────────────────
+export async function analyzeTarget(imageUri: string): Promise<DetectionResult> {
+  await new Promise(resolve => setTimeout(resolve, 800));
+
+  if (IS_MOCK) {
+    return generateMockDetection();
+  }
+
+  try {
+    const boxes = await runModelInference(imageUri);
+    const diana = extractDianaGeometry(boxes);
+
+    if (!diana) {
+      return {
+        arrows: [],
+        tendency: null,
+        dianaCenter: { x: 0.5, y: 0.5 },
+        dianaRadius: 0.4,
+        success: false,
+        errorMessage: 'No se detectó la diana. Asegúrate de que esté bien encuadrada.',
+      };
+    }
+
+    const arrowBoxes = boxes.filter(b => b.classId === 0 && b.confidence > 0.45);
+
+    const arrows: ArrowDetection[] = arrowBoxes.map(box => ({
+      score: distanceToScore(box.xCenter, box.yCenter, diana),
+      x: box.xCenter,
+      y: box.yCenter,
+      confidence: box.confidence,
+    }));
+
+    if (arrows.length === 0) {
+      return {
+        arrows: [],
+        tendency: null,
+        dianaCenter: { x: diana.centerX, y: diana.centerY },
+        dianaRadius: diana.totalRadius,
+        success: false,
+        errorMessage: 'Se detectó la diana pero no se encontraron flechas.',
+      };
+    }
+
+    const tendency = calculateTendency(arrows, diana);
+
+    return {
+      arrows,
+      tendency,
+      dianaCenter: { x: diana.centerX, y: diana.centerY },
+      dianaRadius: diana.totalRadius,
+      success: true,
+    };
+
+  } catch (error) {
+    return {
+      arrows: [],
+      tendency: null,
+      dianaCenter: { x: 0.5, y: 0.5 },
+      dianaRadius: 0.4,
+      success: false,
+      errorMessage: 'Error al procesar la imagen.',
+    };
+  }
+}
+
+// ─── Mock realista para desarrollo ───────────────────────────────
 function generateMockDetection(): DetectionResult {
   const center = { x: 0.5, y: 0.5 };
   const radius = 0.4;
 
+  // Simular tendencia hacia arriba-derecha como ejemplo
+  const tendencyBias = { x: 0.04, y: -0.03 };
+
   const arrows: ArrowDetection[] = Array.from({ length: 3 }, () => {
-    // Distribución realista: mayoría en zona 7-10
     const angle = Math.random() * 2 * Math.PI;
     const distRatio = Math.random() < 0.7
-      ? Math.random() * 0.45       // buen tirador: zona 7-X
-      : 0.45 + Math.random() * 0.55; // dispersión
+      ? Math.random() * 0.45
+      : 0.45 + Math.random() * 0.55;
 
     const dist = distRatio * radius;
-    const x = center.x + Math.cos(angle) * dist;
-    const y = center.y + Math.sin(angle) * dist;
+    const x = center.x + Math.cos(angle) * dist + tendencyBias.x;
+    const y = center.y + Math.sin(angle) * dist + tendencyBias.y;
 
-    const pixelDist = distRatio * radius;
-    const score = distanceToScore(pixelDist, radius);
+    const diana: DianaGeometry = {
+      centerX: center.x,
+      centerY: center.y,
+      rings: [],
+      totalRadius: radius,
+    };
+
+    const score = distanceToScore(
+      Math.max(0, Math.min(1, x)),
+      Math.max(0, Math.min(1, y)),
+      diana
+    );
 
     return {
       score,
@@ -88,8 +303,18 @@ function generateMockDetection(): DetectionResult {
     };
   });
 
+  const diana: DianaGeometry = {
+    centerX: center.x,
+    centerY: center.y,
+    rings: [],
+    totalRadius: radius,
+  };
+
+  const tendency = calculateTendency(arrows, diana);
+
   return {
     arrows,
+    tendency,
     dianaCenter: center,
     dianaRadius: radius,
     success: true,

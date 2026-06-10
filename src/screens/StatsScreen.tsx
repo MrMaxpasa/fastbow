@@ -16,6 +16,7 @@ import { SCORE_COLORS, roundLabel, arrowToPoints, scoreTextColor, scoreBgColor, 
 import { computeRank } from '../types/ranks';
 import RankCard from '../components/RankCard';
 import type { ArrowScore } from '../types';
+import type { TendencyResult } from '../utils/targetDetection';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_PADDING = 20;
@@ -144,31 +145,67 @@ function ScoreBar({
   );
 }
 
-// ─── Diana placeholder ───────────────────────────────────────────
-function TargetPlaceholder() {
+// ─── Diana de tendencia dinámica ─────────────────────────────────
+function TendencyTarget({ sessions }: { sessions: ReturnType<typeof useAppStore>['sessions'] }) {
+  const theme = useThemeStore((s) => s.theme);
   const SIZE = 200;
   const CX = SIZE / 2;
+
+  const hasRealData = false; // cambiar a true cuando IS_MOCK = false en targetDetection.ts
+
   const rings = [
-    { r: 100, color: '#212121' },
-    { r: 80,  color: '#1565C0' },
-    { r: 60,  color: '#C62828' },
-    { r: 40,  color: '#F9A825' },
-    { r: 20,  color: '#F9A825' },
+    { r: 97, color: '#ffffff', stroke: '#cccccc' },
+    { r: 78, color: '#ffffff', stroke: '#cccccc' },
+    { r: 68, color: '#1a1a1a', stroke: '#333333' },
+    { r: 58, color: '#1a1a1a', stroke: '#333333' },
+    { r: 48, color: '#1565C0', stroke: '#1565C0' },
+    { r: 38, color: '#1565C0', stroke: '#1565C0' },
+    { r: 28, color: '#C62828', stroke: '#C62828' },
+    { r: 18, color: '#C62828', stroke: '#C62828' },
+    { r: 10, color: '#F9A825', stroke: '#F9A825' },
+    { r: 5,  color: '#F9A825', stroke: '#F9A825' },
   ];
+
+  // Simulación de tendencia para mostrar el diseño (solo cuando IS_MOCK activo)
+  const mockTendency = { offsetX: 0.18, offsetY: -0.12 };
+  const tendency = hasRealData ? null : mockTendency;
+
+  const tendencyDotX = CX + (tendency?.offsetX ?? 0) * 90;
+  const tendencyDotY = CX + (tendency?.offsetY ?? 0) * 90;
 
   return (
     <View style={styles.targetWrapper}>
       <Svg width={SIZE} height={SIZE}>
         {rings.map((r, i) => (
-          <Circle key={i} cx={CX} cy={CX} r={r.r} fill={r.color} />
+          <Circle key={i} cx={CX} cy={CX} r={r.r} fill={r.color} stroke={r.stroke} strokeWidth={0.8} />
         ))}
-        <Line x1={CX - 8} y1={CX} x2={CX + 8} y2={CX} stroke="#fff" strokeWidth={1} opacity={0.5} />
-        <Line x1={CX} y1={CX - 8} x2={CX} y2={CX + 8} stroke="#fff" strokeWidth={1} opacity={0.5} />
+        <Line x1={CX - 8} y1={CX} x2={CX + 8} y2={CX} stroke="#fff" strokeWidth={1} opacity={0.6} />
+        <Line x1={CX} y1={CX - 8} x2={CX} y2={CX + 8} stroke="#fff" strokeWidth={1} opacity={0.6} />
+
+        {tendency && (
+          <>
+            <Line
+              x1={CX} y1={CX}
+              x2={tendencyDotX} y2={tendencyDotY}
+              stroke={theme.accent}
+              strokeWidth={1.5}
+              opacity={0.6}
+              strokeDasharray="4,3"
+            />
+            <Circle cx={tendencyDotX} cy={tendencyDotY} r={14} fill={theme.accent} opacity={0.2} />
+            <Circle cx={tendencyDotX} cy={tendencyDotY} r={7} fill={theme.accent} opacity={0.8} />
+          </>
+        )}
       </Svg>
-      <View style={styles.targetOverlay}>
-        <Ionicons name="lock-closed" size={28} color="#ffffff" />
-        <Text style={styles.targetOverlayText}>Disponible con{'\n'}modelo IA entrenado</Text>
-      </View>
+
+      {!hasRealData && (
+        <View style={styles.targetOverlay}>
+          <Ionicons name="lock-closed" size={28} color="#ffffff" />
+          <Text style={styles.targetOverlayText}>
+            Disponible con{'\n'}modelo IA entrenado
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -362,7 +399,7 @@ export default function StatsScreen() {
           { backgroundColor: theme.bgCard, borderColor: theme.border, alignItems: 'center', paddingVertical: 24 },
         ]}
       >
-        <TargetPlaceholder />
+        <TendencyTarget sessions={sessions} />
         <Text style={[styles.placeholderNote, { color: theme.textMuted }]}>
           El análisis de tendencia mostrará dónde tienes mayor dispersión (arriba, abajo, derecha,
           izquierda) una vez el modelo de IA esté entrenado.
