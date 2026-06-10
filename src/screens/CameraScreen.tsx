@@ -86,8 +86,11 @@ export default function CameraScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={styles.camera} facing="back">
-        {/* Barra superior */}
+      <CameraView ref={cameraRef} style={styles.camera} facing="back" />
+
+      {/* Overlay encima de la cámara con posición absoluta */}
+      <View style={styles.overlay}>
+        {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
           <Pressable
             onPress={() => navigation.goBack()}
@@ -95,20 +98,18 @@ export default function CameraScreen({ route, navigation }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Volver"
           >
-            <Text style={styles.backText}>← Volver</Text>
+            <Text style={styles.backText}>✕</Text>
           </Pressable>
           <View style={styles.endBadge}>
             <Text style={styles.endBadgeText}>Serie {endNumber} · {arrowsPerEnd} flechas</Text>
           </View>
-          <View style={{ width: 72 }} />
+          <View style={{ width: 40 }} />
         </View>
 
         {/* Marco guía */}
         <View style={styles.guideFrame}>
           <View style={styles.guideCircle} />
-          <View style={styles.guideTextPill}>
-            <Text style={styles.guideText}>Centra la diana dentro del círculo</Text>
-          </View>
+          <Text style={styles.guideText}>Centra la diana dentro del círculo</Text>
         </View>
 
         {/* Botón de captura */}
@@ -129,7 +130,7 @@ export default function CameraScreen({ route, navigation }: Props) {
             </Pressable>
           )}
         </View>
-      </CameraView>
+      </View>
     </View>
   );
 }
@@ -137,6 +138,13 @@ export default function CameraScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   permissionText: { textAlign: 'center', fontSize: 16, marginBottom: 20, lineHeight: 24 },
   permissionButton: { borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14 },

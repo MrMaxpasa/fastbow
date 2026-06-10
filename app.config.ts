@@ -5,6 +5,10 @@ const config: ExpoConfig = {
   slug: 'fastbow-app',
   version: '1.0.0',
   orientation: 'portrait',
+  assetBundlePatterns: [
+    'assets/**',
+    'assets/models/**',
+  ],
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
   splash: {

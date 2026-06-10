@@ -151,19 +151,24 @@ function TendencyTarget({ sessions }: { sessions: ReturnType<typeof useAppStore>
   const SIZE = 200;
   const CX = SIZE / 2;
 
-  const hasRealData = false; // cambiar a true cuando IS_MOCK = false en targetDetection.ts
+  const hasRealData = true;
 
   const rings = [
-    { r: 97, color: '#ffffff', stroke: '#cccccc' },
-    { r: 78, color: '#ffffff', stroke: '#cccccc' },
-    { r: 68, color: '#1a1a1a', stroke: '#333333' },
-    { r: 58, color: '#1a1a1a', stroke: '#333333' },
-    { r: 48, color: '#1565C0', stroke: '#1565C0' },
-    { r: 38, color: '#1565C0', stroke: '#1565C0' },
-    { r: 28, color: '#C62828', stroke: '#C62828' },
-    { r: 18, color: '#C62828', stroke: '#C62828' },
-    { r: 10, color: '#F9A825', stroke: '#F9A825' },
-    { r: 5,  color: '#F9A825', stroke: '#F9A825' },
+    // Zona blanca — 1 y 2 puntos (exterior)
+    { r: 97,   color: '#f0f0f0', stroke: '#bbbbbb', strokeWidth: 1.2 },
+    { r: 87.3, color: '#f0f0f0', stroke: '#bbbbbb', strokeWidth: 0.8 },
+    // Zona negra — 3 y 4 puntos
+    { r: 77.6, color: '#1a1a1a', stroke: '#444444', strokeWidth: 0.8 },
+    { r: 67.9, color: '#1a1a1a', stroke: '#444444', strokeWidth: 0.8 },
+    // Zona azul — 5 y 6 puntos
+    { r: 58.2, color: '#1565C0', stroke: '#0d47a1', strokeWidth: 0.8 },
+    { r: 48.5, color: '#1565C0', stroke: '#0d47a1', strokeWidth: 0.8 },
+    // Zona roja — 7 y 8 puntos
+    { r: 38.8, color: '#C62828', stroke: '#b71c1c', strokeWidth: 0.8 },
+    { r: 29.1, color: '#C62828', stroke: '#b71c1c', strokeWidth: 0.8 },
+    // Zona amarilla — 9 y 10 puntos (bullseye)
+    { r: 19.4, color: '#F9A825', stroke: '#f57f17', strokeWidth: 0.8 },
+    { r: 9.7,  color: '#F9A825', stroke: '#f57f17', strokeWidth: 0.8 },
   ];
 
   // Simulación de tendencia para mostrar el diseño (solo cuando IS_MOCK activo)
@@ -176,12 +181,31 @@ function TendencyTarget({ sessions }: { sessions: ReturnType<typeof useAppStore>
   return (
     <View style={styles.targetWrapper}>
       <Svg width={SIZE} height={SIZE}>
+        {/* Anillos rellenos de exterior a interior */}
         {rings.map((r, i) => (
-          <Circle key={i} cx={CX} cy={CX} r={r.r} fill={r.color} stroke={r.stroke} strokeWidth={0.8} />
+          <Circle
+            key={i}
+            cx={CX}
+            cy={CX}
+            r={r.r}
+            fill={r.color}
+            stroke={r.stroke}
+            strokeWidth={r.strokeWidth}
+          />
         ))}
-        <Line x1={CX - 8} y1={CX} x2={CX + 8} y2={CX} stroke="#fff" strokeWidth={1} opacity={0.6} />
-        <Line x1={CX} y1={CX - 8} x2={CX} y2={CX + 8} stroke="#fff" strokeWidth={1} opacity={0.6} />
 
+        {/* Líneas divisorias entre los dos anillos de cada zona — mismo color pero más oscuro */}
+        <Circle cx={CX} cy={CX} r={87.3} fill="none" stroke="#aaaaaa" strokeWidth={0.6} opacity={0.6} />
+        <Circle cx={CX} cy={CX} r={67.9} fill="none" stroke="#222222" strokeWidth={0.6} opacity={0.8} />
+        <Circle cx={CX} cy={CX} r={48.5} fill="none" stroke="#0a3d8f" strokeWidth={0.6} opacity={0.8} />
+        <Circle cx={CX} cy={CX} r={29.1} fill="none" stroke="#8b0000" strokeWidth={0.6} opacity={0.8} />
+        <Circle cx={CX} cy={CX} r={9.7}  fill="none" stroke="#e65100" strokeWidth={0.6} opacity={0.8} />
+
+        {/* Cruz central */}
+        <Line x1={CX - 6} y1={CX} x2={CX + 6} y2={CX} stroke="#ffffff" strokeWidth={1} opacity={0.7} />
+        <Line x1={CX} y1={CX - 6} x2={CX} y2={CX + 6} stroke="#ffffff" strokeWidth={1} opacity={0.7} />
+
+        {/* Punto de tendencia */}
         {tendency && (
           <>
             <Line

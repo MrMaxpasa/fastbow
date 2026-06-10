@@ -12,9 +12,13 @@
 //   4 = anillo amarillo
 //   5 = bullseye
 
+import * as ImageManipulator from 'expo-image-manipulator';
+import { Asset } from 'expo-asset';
+import * as FileSystem from 'expo-file-system';
+import { InferenceSession, Tensor } from 'onnxruntime-react-native';
 import type { ArrowScore } from '../types';
 
-const IS_MOCK = true; // cambiar a false cuando el modelo esté listo
+const IS_MOCK = true;
 
 // ─── Tipos internos ───────────────────────────────────────────────
 
@@ -182,21 +186,99 @@ function calculateTendency(
   return { horizontal, vertical, offsetX: normX, offsetY: normY, description };
 }
 
-// ─── PUNTO DE INTEGRACIÓN TFLITE ─────────────────────────────────
-// Cuando IS_MOCK = false, esta función carga el modelo real
+// ─── INTEGRACIÓN TFLITE ───────────────────────────────────────────
 // El modelo debe estar en: assets/models/fastbow_model.tflite
+
+// TODO: cambiar IS_MOCK = false para activar el modelo real.
+// El modelo debe estar en assets/models/fastbow_model.tflite
+
+let loadedSession: InferenceSession | null = null;
+
+async function loadModel(): Promise<InferenceSession> {
+  if (loadedSession) return loadedSession;
+
+  const asset = Asset.fromModule(require('../../assets/models/fastbow_model.tflite'));
+  await asset.downloadAsync();
+
+  if (!asset.localUri) throw new Error('No se pudo cargar el modelo');
+
+  loadedSession = await InferenceSession.create(asset.localUri);
+  return loadedSession;
+}
+
+// Non-Maximum Suppression simple por clase
+function applyNMS(boxes: BoundingBox[], iouThreshold: number): BoundingBox[] {
+  const result: BoundingBox[] = [];
+  const sorted = [...boxes].sort((a, b) => b.confidence - a.confidence);
+
+  for (const box of sorted) {
+    const overlap = result.filter(b => b.classId === box.classId).some(b => {
+      const interX = Math.min(box.xCenter + box.width / 2, b.xCenter + b.width / 2) -
+                     Math.max(box.xCenter - box.width / 2, b.xCenter - b.width / 2);
+      const interY = Math.min(box.yCenter + box.height / 2, b.yCenter + b.height / 2) -
+                     Math.max(box.yCenter - box.height / 2, b.yCenter - b.height / 2);
+      if (interX <= 0 || interY <= 0) return false;
+      const interArea = interX * interY;
+      const unionArea = box.width * box.height + b.width * b.height - interArea;
+      return interArea / unionArea > iouThreshold;
+    });
+    if (!overlap) result.push(box);
+  }
+  return result;
+}
+
 async function runModelInference(imageUri: string): Promise<BoundingBox[]> {
-  // TODO FASE REAL:
-  // 1. import * as tf from '@tensorflow/tfjs';
-  // 2. import '@tensorflow/tfjs-react-native';
-  // 3. const modelJson = require('../../assets/models/fastbow_model.tflite');
-  // 4. const model = await tf.loadGraphModel(tf.io.fromMemory(modelJson));
-  // 5. Preprocesar imagen con expo-image-manipulator a 640x640
-  // 6. Convertir a tensor float32 normalizado 0-1
-  // 7. const predictions = await model.executeAsync(tensor);
-  // 8. Parsear output YOLO [batch, 8400, 6] a BoundingBox[]
-  // 9. Aplicar NMS (Non-Maximum Suppression) para eliminar duplicados
-  throw new Error('Modelo TFLite no integrado todavía');
+  const session = await loadModel();
+
+  const resized = await ImageManipulator.manipulateAsync(
+    imageUri,
+    [{ resize: { width: 640, height: 640 } }],
+    { format: ImageManipulator.SaveFormat.JPEG, base64: true }
+  );
+
+  if (!resized.base64) throw new Error('No se pudo procesar la imagen');
+
+  // Convertir base64 a Float32Array normalizado [1, 3, 640, 640]
+  const binaryString = atob(resized.base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  const float32 = new Float32Array(1 * 3 * 640 * 640);
+  for (let i = 0; i < 640 * 640; i++) {
+    float32[i]                  = bytes[i * 3]     / 255.0;
+    float32[i + 640 * 640]      = bytes[i * 3 + 1] / 255.0;
+    float32[i + 640 * 640 * 2]  = bytes[i * 3 + 2] / 255.0;
+  }
+
+  const inputTensor = new Tensor('float32', float32, [1, 3, 640, 640]);
+  const results = await session.run({ images: inputTensor });
+
+  const output = results[Object.keys(results)[0]];
+  const data = Array.from(output.data as Float32Array);
+
+  const NUM_DETECTIONS = 8400;
+  const NUM_VALUES = 10; // 4 bbox + 6 classes
+  const boxes: BoundingBox[] = [];
+  const CONF_THRESHOLD = 0.45;
+
+  for (let i = 0; i < NUM_DETECTIONS; i++) {
+    const offset = i * NUM_VALUES;
+    const xCenter = data[offset];
+    const yCenter = data[offset + 1];
+    const width   = data[offset + 2];
+    const height  = data[offset + 3];
+    const scores  = data.slice(offset + 4, offset + 4 + 6);
+    const maxScore = Math.max(...scores);
+    const classId  = scores.indexOf(maxScore);
+
+    if (maxScore >= CONF_THRESHOLD) {
+      boxes.push({ xCenter, yCenter, width, height, confidence: maxScore, classId });
+    }
+  }
+
+  return applyNMS(boxes, 0.5);
 }
 
 // ─── Función principal de análisis ───────────────────────────────
